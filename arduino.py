@@ -29,33 +29,32 @@ def generate(env):
         
         # Read the boards file.
         try:
-            with open(env.subst("$ARDUINO_HOME/hardware/arduino/boards.txt")) as f:
+            with open(env.subst("$ARDUINO_HOME/hardware/arduino/avr/boards.txt")) as f:
                 boards = read_boards_file(f)
-        except IOError, e:
+        except IOError as e:
             raise Exception(env.subst(
                 "ARDUINO_HOME ($ARDUINO_HOME) is not a valid arduino installation."))
-        
         # Sensible defaults for variables that aren't defined by default.
         env.SetDefault(
             BOARD       = board,
             F_CPU       = boards[(board, "build", "f_cpu")],
             MCU         = boards[(board, "build", "mcu")],
             VARIANT     = boards[(board, "build", "variant")],
-            VARIANT_DIR = "$ARDUINO_HOME/hardware/arduino/variants/$VARIANT",
+            VARIANT_DIR = "$ARDUINO_HOME/hardware/arduino/avr/variants/$VARIANT",
             CORE        = boards[(board, "build", "core")],
-            CORE_DIR    = "$ARDUINO_HOME/hardware/arduino/cores/$CORE",
+            CORE_DIR    = "$ARDUINO_HOME/hardware/arduino/avr/cores/$CORE",
             BUILD_DIR   = "build/$BOARD",
             AVRDUDE     = "avrdude",
-            AVRDUDEFLAGS = "-V -F -c $UPLOAD_PROTOCOL -b $UPLOAD_SPEED "
+            AVRDUDEFLAGS = "-v -c $UPLOAD_PROTOCOL -b $UPLOAD_SPEED "
                            "-p $MCU -P $UPLOAD_PORT".split(),
-            AVRDUDECMD = "$AVRDUDE $AVRDUDEFLAGS -U flash:w:$SOURCES",
+            AVRDUDECMD = "$AVRDUDE $AVRDUDEFLAGS -U flash:w:$SOURCES:i",
             UPLOAD_PROTOCOL = boards[(board, "upload", "protocol")],
             UPLOAD_SPEED = boards[(board, "upload", "speed")],
             UPLOAD_PORT = "/dev/ttyUSB0")
         
         # Update variables defined by scons.
         env.Append(
-            CCFLAGS = "-ffunction-sections -fdata-sections -fno-exceptions "
+            CCFLAGS = "-I$CORE_DIR -ffunction-sections -fdata-sections -fno-exceptions "
                       "-funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums "
                       "-Os -mmcu=$MCU -DARDUINO=100 -DF_CPU=$F_CPU".split(),
             LINKFLAGS = "-mmcu=$MCU -Os -Wl,--gc-sections -lm".split(),
@@ -63,7 +62,7 @@ def generate(env):
         
         # Set binaries to use.
         env.Replace(CC = "avr-gcc", CXX = "avr-g++",
-                    OBJCOPY = "avr-objcopy", AVRDUDE = "avrdude")
+                    OBJCOPY = "avr-objcopy", AVRDUDE = "avrdude", AS="avr-gcc")
         
         # Set up the variant dir for this board.
         env.VariantDir("$BUILD_DIR/variant", "$VARIANT_DIR")
@@ -121,7 +120,7 @@ def generate(env):
         """
         def reset(target, source, env):
             """Reset the arduino connected to $UPLOAD_PORT."""
-            print "Resetting %s" % env["UPLOAD_PORT"]
+            print ("Resetting %s" % env["UPLOAD_PORT"])
             import serial
             import time
             try:
@@ -129,7 +128,7 @@ def generate(env):
                     ser.setDTR(1)
                     time.sleep(0.5)
                     ser.setDTR(0)
-            except serial.SerialException, e:
+            except serial.SerialException as e:
                 return str(e)
         
         target = env.Alias(name, source, [reset, "$AVRDUDECMD"])
